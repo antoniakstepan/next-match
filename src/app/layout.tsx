@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import TopNav from "@/components/navbar/TopNav";
@@ -19,7 +18,7 @@ export default function RootLayout({
       <body>
         <TopNav />
         <Providers>
-          <main className="container mx-auto p-10">{children}</main>
+          <main className="container mx-auto">{children}</main>
         </Providers>
       </body>
     </html>
