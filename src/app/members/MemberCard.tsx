@@ -1,6 +1,7 @@
 "use client";
 
 import LikeButton from "@/components/LikeButton";
+import PresentDot from "@/components/PresentDot";
 import { calculateAge, transformImageUrl } from "@/lib/util";
 import { Card, CardFooter, Image } from "@nextui-org/react";
 import { Member } from "@prisma/client";
@@ -30,6 +31,9 @@ export default function MemberCard({ member, likeIds }: Props) {
       <div onClick={preventLinkAction}>
         <div className="absolute top-3 right-3 z-10">
           <LikeButton targetId={member.userId} hasLiked={hasLiked} />
+        </div>
+        <div className="absolute top-2 left-3 z-10">
+          <PresentDot member={member} />
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 "use client";
+import PresentDot from "@/components/PresentDot";
 import { calculateAge, transformImageUrl } from "@/lib/util";
 import {
   Button,
@@ -34,9 +35,15 @@ export default function MemberSideBar({ member, navLinks }: Props) {
       />
       <CardBody>
         <div className="flex flex-col items-center">
-          <div className="text-2xl">
-            {member.name}, {calculateAge(member.dateOfBirth)}
+          <div className="flex">
+            <div className="text-2xl">
+              {member.name}, {calculateAge(member.dateOfBirth)}
+            </div>
+            <div>
+              <PresentDot member={member} />
+            </div>
           </div>
+
           <div className="text-sm text-neutral-500">
             {member.city}, {member.country}
           </div>

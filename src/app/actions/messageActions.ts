@@ -1,16 +1,17 @@
 "use server";
 
 import { messageSchema, MessageSchema } from "@/lib/schemas/messageSchema";
-import { ActionResult } from "@/types";
-import { Message } from "@prisma/client";
+import { ActionResult, messageDTO } from "@/types";
 import { getAuthUserId } from "./authAction";
 import { prisma } from "@/lib/prisma";
 import { mapMessageToMessageDTO } from "@/lib/mapping";
+import { pusherServer } from "@/lib/pusher";
+import { createChatId } from "@/lib/util";
 
 export async function createMessage(
   recipientUserId: string,
   data: MessageSchema
-): Promise<ActionResult<Message>> {
+): Promise<ActionResult<messageDTO>> {
   try {
     const userId = await getAuthUserId();
 
@@ -28,11 +29,26 @@ export async function createMessage(
         recipientId: recipientUserId,
         senderId: userId,
       },
+      select: messageSelect,
     });
+
+    const messageDto = mapMessageToMessageDTO(message);
+
+    await pusherServer.trigger(
+      createChatId(userId, recipientUserId),
+      "message:new",
+      messageDto
+    );
+
+    await pusherServer.trigger(
+      `private-${recipientUserId}`,
+      `message:new`,
+      messageDto
+    );
 
     return {
       status: "success",
-      data: message,
+      data: messageDto,
     };
   } catch (error) {
     console.log("Send message error: ", error);
@@ -65,42 +81,45 @@ export async function getMessageThread(recipientUserId: string) {
       orderBy: {
         created: "asc",
       },
-      select: {
-        id: true,
-        text: true,
-        created: true,
-        dateRead: true,
-        sender: {
-          select: {
-            userId: true,
-            name: true,
-            image: true,
-          },
-        },
-        recipient: {
-          select: {
-            userId: true,
-            name: true,
-            image: true,
-          },
-        },
-      },
+      select: messageSelect,
     });
 
+    let readCount = 0;
+
     if (messages.length > 0) {
+      const readMessageIds = messages
+        .filter(
+          (m) =>
+            m.dateRead === null &&
+            m.recipient?.userId === userId &&
+            m.sender?.userId === recipientUserId
+        )
+        .map((m) => m.id);
+
       await prisma.message.updateMany({
         where: {
-          senderId: recipientUserId,
-          recipientId: userId,
-          dateRead: null,
+          id: { in: readMessageIds },
         },
         data: {
           dateRead: new Date(),
         },
       });
-    }
 
-    return messages.map((message) => mapMessageToMessageDTO(message));
+      readCount = readMessageIds.length;
+
+      await pusherServer.trigger(
+        createChatId(recipientUserId, userId),
+        "messages:read",
+        readMessageIds
+      );
+    }
+    const messagesToReturn = messages.map((message) =>
+      mapMessageToMessageDTO(message)
+    );
+    return {
+      messages: messagesToReturn,
+      readCount,
+    };
   } catch (error) {
     console.log("Get messages error: ", error);
     throw error;
@@ -124,26 +143,7 @@ export const getMessagesByContainer = async (container: string) => {
       orderBy: {
         created: "desc",
       },
-      select: {
-        id: true,
-        text: true,
-        created: true,
-        dateRead: true,
-        sender: {
-          select: {
-            userId: true,
-            name: true,
-            image: true,
-          },
-        },
-        recipient: {
-          select: {
-            userId: true,
-            name: true,
-            image: true,
-          },
-        },
-      },
+      select: messageSelect,
     });
 
     return messages.map((message) => mapMessageToMessageDTO(message));
@@ -186,4 +186,42 @@ export const deleteMessage = async (messageId: string, isOutBox: boolean) => {
   } catch (error) {
     console.log("Delete message error: ", error);
   }
+};
+
+export const getUnreadMessageCount = async () => {
+  try {
+    const userId = await getAuthUserId();
+
+    return prisma.message.count({
+      where: {
+        recipientId: userId,
+        dateRead: null,
+        recipientDeleted: false,
+      },
+    });
+  } catch (error) {
+    console.log("Get user message count error: ", error);
+    throw error;
+  }
+};
+
+const messageSelect = {
+  id: true,
+  text: true,
+  created: true,
+  dateRead: true,
+  sender: {
+    select: {
+      userId: true,
+      name: true,
+      image: true,
+    },
+  },
+  recipient: {
+    select: {
+      userId: true,
+      name: true,
+      image: true,
+    },
+  },
 };
